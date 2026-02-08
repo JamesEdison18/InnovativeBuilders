@@ -18,30 +18,18 @@ export function Topbar() {
             <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Dashboard</h2>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ position: 'relative' }}>
-                    <select
-                        value={role}
-                        onChange={(e) => setRole(e.target.value)}
-                        style={{
-                            appearance: 'none',
-                            padding: '0.5rem 2.5rem 0.5rem 1rem',
-                            borderRadius: 'var(--radius-md)',
-                            border: '1px solid var(--border)',
-                            fontSize: '0.875rem',
-                            background: 'var(--bg-body)',
-                            color: 'var(--text-main)',
-                            cursor: 'pointer',
-                            outline: 'none',
-                            fontWeight: 500
-                        }}
-                    >
-                        {Object.values(ROLES).map(r => (
-                            <option key={r} value={r}>{r}</option>
-                        ))}
-                    </select>
-                    <div style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                    </div>
+                <div style={{
+                    padding: '0.5rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--bg-body)',
+                    border: '1px solid var(--border)',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    color: 'var(--primary)'
+                }}>
+                    {role === 'TEAM' ? 'Team Member' :
+                        role === 'CO_FOUNDER' ? 'Co-Founder' :
+                            role ? role.charAt(0).toUpperCase() + role.slice(1).toLowerCase().replace('_', '-') : 'Guest'}
                 </div>
 
                 <button style={{ position: 'relative', padding: '0.5rem' }}>

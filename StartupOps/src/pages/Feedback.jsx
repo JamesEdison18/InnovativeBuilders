@@ -1,23 +1,82 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { useRole, ROLES } from '../contexts/RoleContext';
+import { db } from '../lib/firebase';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
-import { MessageSquare, ThumbsUp, ThumbsDown, User, ExternalLink } from 'lucide-react';
+import { MessageSquare, ThumbsUp, ThumbsDown, User, ExternalLink, Plus, Loader2, X } from 'lucide-react';
 
 export default function Feedback() {
+    const { userProfile } = useAuth();
     const { role } = useRole();
     const [activeTab, setActiveTab] = useState('internal'); // internal, external
+    const [feedbackItems, setFeedbackItems] = useState([]);
+    const [teamMap, setTeamMap] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [newFeedback, setNewFeedback] = useState({ content: '', type: 'internal' });
+
+    useEffect(() => {
+        if (!userProfile?.startupId) {
+            setLoading(false);
+            return;
+        }
+
+        // Feedback Subscription
+        const q = query(collection(db, 'feedback'), where('startupId', '==', userProfile.startupId));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // Client-side sort
+            list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            setFeedbackItems(list);
+            setLoading(false);
+        });
+
+        // Team Subscription (for roles)
+        const teamQ = query(collection(db, 'users'), where('startupId', '==', userProfile.startupId));
+        const unsubscribeTeam = onSnapshot(teamQ, (snapshot) => {
+            const map = {};
+            snapshot.docs.forEach(doc => {
+                map[doc.id] = doc.data();
+            });
+            setTeamMap(map);
+        });
+
+        return () => {
+            unsubscribe();
+            unsubscribeTeam();
+        };
+    }, [userProfile]);
+
+    const handleAddFeedback = async (e) => {
+        e.preventDefault();
+        if (!newFeedback.content) return;
+
+        try {
+            await addDoc(collection(db, 'feedback'), {
+                ...newFeedback,
+                status: 'Open',
+                startupId: userProfile.startupId,
+                authorId: userProfile.uid,
+                startupId: userProfile.startupId,
+                authorId: userProfile.uid,
+                authorName: userProfile.displayName || 'Team Member',
+                authorRole: userProfile.role || 'TEAM',
+                createdAt: serverTimestamp()
+            });
+            setShowModal(false);
+            setNewFeedback({ content: '', type: 'internal' });
+        } catch (error) {
+            console.error("Error adding feedback:", error);
+        }
+    };
 
     const isInternal = activeTab === 'internal';
+    const filteredFeedback = feedbackItems.filter(f => f.type === activeTab);
 
-    const feedbackData = [
-        { id: 1, type: 'internal', author: 'Mentor (Sarah)', content: 'The user onboarding flow feels a bit disconnected. Consider adding a progress bar.', date: '2 days ago', status: 'Open' },
-        { id: 2, type: 'external', author: 'Beta User #42', content: 'Love the clean design! But I couldn\'t find the export button easily.', date: '1 day ago', status: 'Addressed' },
-        { id: 3, type: 'internal', author: 'Co-Founder', content: 'We need to validate the pricing model before the next sprint.', date: '3 days ago', status: 'In Progress' },
-    ];
-
-    const filteredFeedback = feedbackData.filter(f => f.type === activeTab);
+    if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
 
     return (
         <div className="flex flex-col gap-6" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -27,7 +86,7 @@ export default function Feedback() {
                     <h1 className="text-2xl font-bold">Feedback & Validation</h1>
                     <p className="text-muted">Validate ideas and gather insights.</p>
                 </div>
-                <Button>+ New Insight</Button>
+                <Button icon={Plus} onClick={() => setShowModal(true)}>New Insight</Button>
             </div>
 
             {/* Tabs */}
@@ -60,58 +119,78 @@ export default function Feedback() {
 
             {/* Feedback List */}
             <div style={{ display: 'grid', gap: '1rem' }}>
-                {filteredFeedback.map(item => (
-                    <Card key={item.id}>
-                        <div style={{ display: 'flex', gap: '1rem' }}>
-                            <div style={{ padding: '0.5rem', background: 'var(--bg-body)', borderRadius: '50%', height: 'fit-content' }}>
-                                <User size={24} color="var(--text-secondary)" />
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                    <h4 style={{ fontWeight: 600 }}>{item.author}</h4>
-                                    <span className="text-sm text-muted">{item.date}</span>
+                {filteredFeedback.length === 0 ? (
+                    <div className="text-center p-12 border border-dashed rounded-lg">
+                        <p className="text-muted">No feedback recorded yet.</p>
+                    </div>
+                ) : (
+                    filteredFeedback.map(item => (
+                        <Card key={item.id}>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <div style={{ padding: '0.5rem', background: 'var(--bg-body)', borderRadius: '50%', height: 'fit-content' }}>
+                                    <User size={24} color="var(--text-secondary)" />
                                 </div>
-                                <p style={{ color: 'var(--text-main)', marginBottom: '1rem' }}>{item.content}</p>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <h4 style={{ fontWeight: 600 }}>{item.authorName}</h4>
+                                            {(() => {
+                                                const rawRole = teamMap[item.authorId]?.role || item.authorRole || 'TEAM';
+                                                const displayRole = rawRole === 'TEAM' ? 'Team Member' :
+                                                    rawRole === 'CO_FOUNDER' ? 'Co-Founder' :
+                                                        rawRole.charAt(0).toUpperCase() + rawRole.slice(1).toLowerCase().replace('_', ' ');
+                                                return <Badge variant="gray" className="text-[10px] py-0 px-2">{displayRole}</Badge>;
+                                            })()}
+                                        </div>
+                                        <span className="text-sm text-muted">{item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Just now'}</span>
+                                    </div>
+                                    <p style={{ color: 'var(--text-main)', marginBottom: '1rem' }}>{item.content}</p>
 
-                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                    <Badge variant={item.status === 'Open' ? 'yellow' : item.status === 'In Progress' ? 'blue' : 'green'}>{item.status}</Badge>
-                                    <Button style={{ fontSize: '0.875rem', padding: '0.25rem 0.5rem' }}>Reply</Button>
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                        <Badge variant={item.status === 'Open' ? 'yellow' : item.status === 'In Progress' ? 'blue' : 'green'}>{item.status}</Badge>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </Card>
-                ))}
+                        </Card>
+                    ))
+                )}
             </div>
 
-            {/* Validation Concept (Example) */}
-            <div style={{ marginTop: '2rem' }}>
-                <h3 className="section-title" style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Active Validation Experiments</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
-                    <Card>
-                        <CardHeader title="Pricing Tier A/B Test" />
-                        <p className="text-sm text-muted" style={{ marginBottom: '1rem' }}>Testing willingness to pay for the 'Pro' tier at $29 vs $49.</p>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* Modal */}
+            {showModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+                    <div style={{ background: 'var(--bg-surface)', padding: '2rem', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '500px' }}>
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-bold">New Feedback / Insight</h2>
+                            <button onClick={() => setShowModal(false)}><X size={24} /></button>
+                        </div>
+                        <form onSubmit={handleAddFeedback} className="flex flex-col gap-4">
                             <div>
-                                <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>24%</span>
-                                <span className="text-sm text-muted ml-2">Conversion</span>
+                                <label className="block text-sm font-medium mb-1">Type</label>
+                                <select
+                                    className="w-full p-2 border rounded"
+                                    value={newFeedback.type}
+                                    onChange={(e) => setNewFeedback({ ...newFeedback, type: e.target.value })}
+                                >
+                                    <option value="internal">Internal / Mentor</option>
+                                    <option value="external">External Validation</option>
+                                </select>
                             </div>
-                            <Badge variant="blue">Running</Badge>
-                        </div>
-                    </Card>
-                    <Card>
-                        <CardHeader title="Feature: Dark Mode" />
-                        <p className="text-sm text-muted" style={{ marginBottom: '1rem' }}>Survey results from 50 beta users.</p>
-                        <div style={{ display: 'flex', gap: '1rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                <ThumbsUp size={16} color="var(--success)" /> <span style={{ fontWeight: 600 }}>42</span>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Content</label>
+                                <textarea
+                                    required
+                                    className="w-full p-2 border rounded min-h-[100px]"
+                                    placeholder="What's the feedback?"
+                                    value={newFeedback.content}
+                                    onChange={(e) => setNewFeedback({ ...newFeedback, content: e.target.value })}
+                                />
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                <ThumbsDown size={16} color="var(--danger)" /> <span style={{ fontWeight: 600 }}>8</span>
-                            </div>
-                        </div>
-                    </Card>
+                            <Button type="submit">Submit Insight</Button>
+                        </form>
+                    </div>
                 </div>
-            </div>
+            )}
 
         </div>
     );

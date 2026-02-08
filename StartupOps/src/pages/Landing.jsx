@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
+import { seedDatabase } from '../utils/seedData';
 import { useRole, ROLES } from '../contexts/RoleContext';
 import { ArrowRight, User, Users, Briefcase, FileText, CheckSquare, Layers, MessageSquare, Play } from 'lucide-react';
 import './landing.css';
@@ -32,7 +33,14 @@ export default function Landing() {
                     <a href="#" className="hidden md:block text-sm font-medium text-muted hover:text-main">Features</a>
                     <a href="#" className="hidden md:block text-sm font-medium text-muted hover:text-main">Pricing</a>
                     <a href="#" className="hidden md:block text-sm font-medium text-muted hover:text-main">Resources</a>
-                    <Button onClick={() => handleEnter(ROLES.FOUNDER)}>Get Started</Button>
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <Link to="/login">
+                            <Button variant="ghost" style={{ color: 'var(--text-main)' }}>Log In</Button>
+                        </Link>
+                        <Link to="/signup">
+                            <Button>Get Started</Button>
+                        </Link>
+                    </div>
                 </div>
             </nav>
 
@@ -49,7 +57,9 @@ export default function Landing() {
                         One workspace to manage your documents, team, and mentorship. Built to scale with your vision from day zero.
                     </p>
                     <div style={{ display: 'flex', gap: '1rem' }}>
-                        <Button onClick={() => handleEnter(ROLES.FOUNDER)} style={{ padding: '0.75rem 1.5rem', fontSize: '1rem' }}>Launch Workspace</Button>
+                        <Link to="/signup">
+                            <Button style={{ padding: '0.75rem 1.5rem', fontSize: '1rem' }}>Launch Workspace</Button>
+                        </Link>
                         <Button icon={Play} style={{ padding: '0.75rem 1.5rem', fontSize: '1rem' }}>Watch Demo</Button>
                     </div>
 
@@ -212,8 +222,13 @@ export default function Landing() {
                 <h2 style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '1rem' }}>Ready to build your startup's<br />operational foundation?</h2>
                 <p style={{ fontSize: '1.125rem', opacity: 0.9, marginBottom: '2.5rem', maxWidth: '600px', margin: '0 auto 2.5rem', color: '#CBD5E1' }}>Join 2,500+ founders who have streamlined their day-to-day operations with StartupOps.</p>
                 <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                    <Button style={{ background: 'white', color: '#0F172A' }}>Start Free Trial</Button>
+                    <Link to="/signup">
+                        <Button style={{ background: 'white', color: '#0F172A' }}>Start Free Trial</Button>
+                    </Link>
                     <Button>Talk to Sales</Button>
+                    <Button onClick={seedDatabase} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
+                        Reset Database (Dev)
+                    </Button>
                 </div>
                 <p style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '1.5rem', color: '#94A3B8' }}>No credit card required. Cancel anytime.</p>
             </section>
