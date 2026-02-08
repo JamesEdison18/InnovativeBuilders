@@ -53,13 +53,7 @@ export default function Dashboard() {
         // 2. Team Listener
         const teamQuery = query(collection(db, 'users'), where('startupId', '==', startupId));
         const unsubscribeTeam = onSnapshot(teamQuery, (snapshot) => {
-            console.log("DASHBOARD TEAM DEBUG:", {
-                currentUser: userProfile.email,
-                role: role,
-                myStartupId: startupId,
-                count: snapshot.size,
-                members: snapshot.docs.map(d => ({ id: d.id, email: d.data().email, name: d.data().displayName, role: d.data().role }))
-            });
+
             setStats(prev => ({ ...prev, teamMembers: snapshot.size }));
         });
 
@@ -118,7 +112,7 @@ export default function Dashboard() {
                         <CardHeader
                             title="Recent Tasks"
                             subtitle="Latest activity on your roadmap"
-                            action={<Link to="/tasks"><Button className="text-sm" variant="ghost">View All</Button></Link>}
+                            action={<Link to="/tasks"><Button className="text-sm hover:underline" variant="ghost" style={{ color: 'var(--primary)', padding: 0 }}>View All</Button></Link>}
                         />
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -165,22 +159,16 @@ export default function Dashboard() {
                             )}
                         </div>
                         <div style={{ marginTop: '1rem' }}>
-                            {/* Link to Feedback page if it exists later */}
-                            <Button style={{ width: '100%' }} variant="ghost">View All Feedback</Button>
+                            <Link to="/feedback">
+                                <Button style={{ width: '100%', color: 'var(--primary)', borderColor: 'var(--primary)' }} variant="outline">View All Feedback</Button>
+                            </Link>
                         </div>
                     </Card>
                 </div>
 
             </div>
 
-            {/* DEBUG INFO - REMOVE BEFORE PRODUCTION */}
-            <div className="p-4 bg-gray-100 rounded text-xs font-mono border overflow-auto">
-                <p><strong>DEBUG INFO:</strong></p>
-                <p>My UID: {userProfile?.uid}</p>
-                <p>My StartupID: {userProfile?.startupId}</p>
-                <p>Team Count From Query: {stats.teamMembers}</p>
-                <p>Recent Tasks: {recentTasks.length}</p>
-            </div>
+
         </div>
     );
 }

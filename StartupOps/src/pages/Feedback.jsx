@@ -159,28 +159,58 @@ export default function Feedback() {
             {/* Modal */}
             {showModal && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-                    <div style={{ background: 'var(--bg-surface)', padding: '2rem', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '500px' }}>
-                        <div className="flex justify-between items-center mb-6">
+                    <div style={{ background: 'var(--bg-surface)', padding: '2rem', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <div className="flex justify-between items-start mb-6" style={{ position: 'relative' }}>
                             <h2 className="text-xl font-bold">New Feedback / Insight</h2>
-                            <button onClick={() => setShowModal(false)}><X size={24} /></button>
+                            <button
+                                onClick={() => setShowModal(false)}
+                                style={{
+                                    position: 'absolute',
+                                    right: '-1rem',
+                                    top: '-1rem',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: '0.5rem'
+                                }}
+                            >
+                                <X size={24} color="#EF4444" />
+                            </button>
                         </div>
-                        <form onSubmit={handleAddFeedback} className="flex flex-col gap-4">
+                        <form onSubmit={handleAddFeedback} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                             <div>
-                                <label className="block text-sm font-medium mb-1">Type</label>
+                                <label className="block text-sm font-medium" style={{ marginBottom: '0.5rem', display: 'block' }}>Type</label>
                                 <select
-                                    className="w-full p-2 border rounded"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem',
+                                        background: 'var(--bg-card)',
+                                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                                        borderRadius: '4px',
+                                        color: 'white',
+                                        outline: 'none'
+                                    }}
                                     value={newFeedback.type}
                                     onChange={(e) => setNewFeedback({ ...newFeedback, type: e.target.value })}
                                 >
-                                    <option value="internal">Internal / Mentor</option>
-                                    <option value="external">External Validation</option>
+                                    <option value="internal" style={{ color: 'black' }}>Internal / Mentor</option>
+                                    <option value="external" style={{ color: 'black' }}>External Validation</option>
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium mb-1">Content</label>
+                                <label className="block text-sm font-medium" style={{ marginBottom: '0.5rem', display: 'block' }}>Content</label>
                                 <textarea
                                     required
-                                    className="w-full p-2 border rounded min-h-[100px]"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem',
+                                        background: 'rgba(255, 255, 255, 0.05)',
+                                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                                        borderRadius: '4px',
+                                        color: 'white',
+                                        outline: 'none',
+                                        minHeight: '100px'
+                                    }}
                                     placeholder="What's the feedback?"
                                     value={newFeedback.content}
                                     onChange={(e) => setNewFeedback({ ...newFeedback, content: e.target.value })}

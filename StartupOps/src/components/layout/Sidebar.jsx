@@ -7,12 +7,25 @@ import {
     Lightbulb,
     BarChart2,
     Settings,
-    Users
+    Users,
+    LogOut
 } from 'lucide-react';
 import { useRole, ROLES } from '../../contexts/RoleContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function Sidebar() {
     const { role } = useRole();
+    const { logout, userProfile } = useAuth();
+
+    const displayName = userProfile?.displayName || 'User Name';
+    const rawRole = userProfile?.role || role;
+    const displayRole = rawRole === 'TEAM'
+        ? 'Team Member'
+        : rawRole === 'CO_FOUNDER'
+            ? 'Co-Founder'
+            : rawRole
+                ? rawRole.charAt(0).toUpperCase() + rawRole.slice(1).toLowerCase().replace('_', '-')
+                : 'Guest';
 
     const menuItems = [
         {
@@ -99,13 +112,38 @@ export function Sidebar() {
             </nav>
 
             <div style={{ padding: '1.5rem', borderTop: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--border)' }}></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border)' }}>
+                        <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{displayName.charAt(0)}</span>
+                    </div>
                     <div>
-                        <p className="text-sm font-semibold">User Name</p>
-                        <p className="text-sm text-muted" style={{ fontSize: '0.75rem' }}>{role}</p>
+                        <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>{displayName}</p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{displayRole}</p>
                     </div>
                 </div>
+                <button
+                    onClick={logout}
+                    style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                        padding: '0.5rem',
+                        background: 'transparent',
+                        border: '1px solid var(--border)',
+                        borderRadius: '6px',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        transition: 'background 0.2s'
+                    }}
+                    onMouseOver={(e) => e.target.style.background = 'var(--bg-card)'}
+                    onMouseOut={(e) => e.target.style.background = 'transparent'}
+                >
+                    <LogOut size={16} />
+                    Log Out
+                </button>
             </div>
         </aside>
     );

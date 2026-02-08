@@ -7,6 +7,7 @@ import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { CheckCircle2, Clock, Calendar, Plus, X, Loader2, User, Flag, BarChart2, CheckSquare, Trash2 } from 'lucide-react';
+import { createNotification } from '../lib/notifications';
 
 export default function Tasks() {
     const { userProfile, currentUser } = useAuth();
@@ -49,7 +50,7 @@ export default function Tasks() {
         const milestonesQuery = query(collection(db, 'milestones'), where('startupId', '==', startupId));
         const unsubMilestones = onSnapshot(milestonesQuery, (snapshot) => {
             const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            list.sort((a, b) => new Date(a.date) - new Date(b.date));
+            list.sort((a, b) => new Date(a.date || '9999-12-31') - new Date(b.date || '9999-12-31'));
             setMilestones(list);
         });
 
@@ -87,6 +88,23 @@ export default function Tasks() {
                 createdBy: currentUser?.uid || userProfile?.uid,
                 createdAt: serverTimestamp()
             });
+
+            // NOTIFICATIONS: Send to all assigned users (except self)
+            if (newTask.assignedTo && newTask.assignedTo.length > 0) {
+                newTask.assignedTo.forEach(uid => {
+                    if (uid !== (currentUser?.uid)) {
+                        createNotification(
+                            uid,
+                            'task_assignment',
+                            'New Task Assigned',
+                            `You have been assigned to: "${newTask.title}"`,
+                            '/tasks',
+                            userProfile
+                        );
+                    }
+                });
+            }
+
             setShowTaskModal(false);
             setNewTask({ title: '', description: '', priority: 'Medium', dueDate: '', assignedTo: [] });
         } catch (error) {
@@ -264,78 +282,94 @@ export default function Tasks() {
                 </div>
             )}
 
-            {/* Content: Milestones (Vertical Neon Roadmap) */}
+            {/* Content: Milestones (Horizontal Neon Roadmap) */}
             {activeTab === 'milestones' && (
-                <div className="relative py-8 px-4">
+                <div className="relative py-8 px-4" style={{ overflow: 'hidden' }}>
                     {milestones.length === 0 ? (
                         <div className="text-center py-10 text-muted border border-dashed border-white/10 rounded-xl">
                             <p>No milestones created yet.</p>
                             {role === ROLES.FOUNDER && <p className="text-sm mt-2 text-blue-400">Click "New Milestone" to begin.</p>}
                         </div>
                     ) : (
-                        <div className="max-w-2xl mx-auto space-y-0">
+                        <div className="neon-roadmap-container">
+                            <div className="neon-path-line" style={{ width: `${milestones.length * 320}px` }}></div>
                             {milestones.map((ms, index) => {
                                 const isCompleted = ms.status === 'Completed';
-                                const isNext = !isCompleted && (index === 0 || milestones[index - 1].status === 'Completed');
-                                const isLast = index === milestones.length - 1;
+                                // Determine if active: explicitly 'In Progress' OR it's the first non-completed one
+                                const isActive = ms.status === 'In Progress' || (!isCompleted && (index === 0 || milestones[index - 1].status === 'Completed') && ms.status !== 'Pending');
+                                // Actually, stick to status if set. If pending, it's upcoming.
+
+                                let statusClass = 'upcoming';
+                                if (ms.status === 'Completed') statusClass = 'completed';
+                                else if (ms.status === 'In Progress') statusClass = 'active';
 
                                 return (
-                                    <div key={ms.id} className="flex gap-8 relative min-h-[120px]">
-                                        {/* Timeline Line (Left) */}
-                                        <div className="flex flex-col items-center">
-                                            {/* Node */}
-                                            <div
-                                                className={`neon-node ${isCompleted ? 'completed' : isNext ? 'current' : 'upcoming'} cursor-pointer z-10 shrink-0 w-8 h-8 flex items-center justify-center rounded-full border-2 transition-all duration-300`}
-                                                onClick={() => role === ROLES.FOUNDER && toggleMilestoneStatus(ms)}
-                                            >
-                                                {isCompleted && <CheckCircle2 size={18} className="text-blue-400" />}
-                                                {isNext && <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-ping" />}
+                                    <div key={ms.id} className="milestone-wrapper">
+                                        {/* Node on the line */}
+                                        <div
+                                            className={`milestone-node ${statusClass}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Prevent opening modal
+                                                if (isFounder) toggleMilestoneStatus(ms);
+                                            }}
+                                            style={{ cursor: isFounder ? 'pointer' : 'default' }}
+                                        />
+
+                                        {/* Card below */}
+                                        <div
+                                            className="milestone-card"
+                                            onClick={() => isFounder && handleEditMilestone(ms)}
+                                        >
+                                            <div className="flex justify-between items-start mb-2">
+                                                <h4 className="milestone-title">{ms.title}</h4>
+                                                <span className={`milestone-badge ${statusClass}`}>
+                                                    {ms.status}
+                                                </span>
                                             </div>
 
-                                            {/* Vertical Connector */}
-                                            {!isLast && (
-                                                <div
-                                                    className={`w-1 grow my-2 rounded-full ${isCompleted ? 'bg-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-slate-700/30 border-l border-r border-slate-700/50'}`}
-                                                ></div>
-                                            )}
-                                        </div>
+                                            <p className="text-sm text-muted mb-4 line-clamp-2">{ms.description}</p>
 
-                                        {/* Card (Right) */}
-                                        <div className="pb-12 grow">
-                                            <div className="neon-card p-6 rounded-xl relative hover:border-blue-400/30 transition-all group border border-white/5 bg-slate-900/40 backdrop-blur-md">
-                                                {role === ROLES.FOUNDER && (
+                                            {/* Progress Bar */}
+                                            <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', marginBottom: '1rem', overflow: 'hidden' }}>
+                                                <div
+                                                    style={{
+                                                        height: '100%',
+                                                        width: `${ms.progress || 0}%`,
+                                                        background: statusClass === 'completed' ? 'var(--success)' : statusClass === 'active' ? '#A855F7' : 'var(--text-secondary)',
+                                                        transition: 'width 0.5s ease'
+                                                    }}
+                                                />
+                                            </div>
+
+                                            <div className="milestone-meta">
+                                                {ms.date && (
+                                                    <span className="flex items-center gap-1">
+                                                        <Calendar size={12} /> {ms.date}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Actions for Founder */}
+                                            {role === ROLES.FOUNDER && (
+                                                <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); deleteMilestone(ms.id); }}
-                                                        className="absolute p-2 rounded-lg transition-all duration-300 z-50 group-hover:scale-110"
                                                         style={{
-                                                            position: 'absolute',
-                                                            top: '16px',
-                                                            right: '16px',
-                                                            color: '#EF4444',
-                                                            boxShadow: '0 0 15px rgba(239, 68, 68, 0.6)',
-                                                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                                                            border: '1px solid rgba(239, 68, 68, 0.3)'
+                                                            color: '#ff4d4d',
+                                                            filter: 'drop-shadow(0 0 8px rgba(255, 77, 77, 0.8))',
+                                                            transition: 'all 0.3s ease',
+                                                            background: 'transparent',
+                                                            border: 'none',
+                                                            cursor: 'pointer',
+                                                            padding: '0.25rem'
                                                         }}
+                                                        className="hover:scale-110"
                                                         title="Delete Milestone"
                                                     >
-                                                        <Trash2 size={20} />
+                                                        <Trash2 size={18} />
                                                     </button>
-                                                )}
-
-                                                <h3 className={`text-xl font-bold mb-3 ${isCompleted ? 'text-blue-50' : 'text-slate-300'}`}>
-                                                    {ms.title}
-                                                </h3>
-
-                                                <div className="flex items-center gap-3">
-                                                    <Badge
-                                                        variant={isCompleted ? 'green' : 'gray'}
-                                                        className={`text-xs px-2.5 py-0.5 border ${isCompleted ? 'border-green-500/30' : 'border-white/10'}`}
-                                                    >
-                                                        {ms.status}
-                                                    </Badge>
-                                                    <span className="text-xs text-purple-300 font-mono tracking-wider bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">{ms.date}</span>
                                                 </div>
-                                            </div>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -343,166 +377,259 @@ export default function Tasks() {
                         </div>
                     )}
                 </div>
-            )}
+            )
+            }
 
             {/* Content: Team Status */}
-            {activeTab === 'progress' && (
-                <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-                    {teamMembers.map(member => {
-                        const stats = getMemberStats(member.id);
-                        return (
-                            <Card key={member.id} className="p-4">
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <User size={20} className="text-muted" />
+            {
+                activeTab === 'progress' && (
+                    <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+                        {teamMembers.map(member => {
+                            const stats = getMemberStats(member.id);
+                            return (
+                                <Card key={member.id} className="p-4">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <User size={20} className="text-muted" />
+                                        </div>
+                                        <div>
+                                            <h3 style={{ fontWeight: 600 }}>{member.displayName || member.email}</h3>
+                                            <div className="text-sm text-muted">{member.role}</div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h3 style={{ fontWeight: 600 }}>{member.displayName || member.email}</h3>
-                                        <div className="text-sm text-muted">{member.role}</div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', textAlign: 'center' }}>
+                                        <div className="p-2 bg-gray-50 rounded">
+                                            <div className="text-lg font-bold">{stats.total}</div>
+                                            <div className="text-xs text-muted">Assigned</div>
+                                        </div>
+                                        <div className="p-2 bg-green-50 rounded text-green-700">
+                                            <div className="text-lg font-bold">{stats.completed}</div>
+                                            <div className="text-xs">Done</div>
+                                        </div>
+                                        <div className="p-2 bg-blue-50 rounded text-blue-700">
+                                            <div className="text-lg font-bold">{Math.round(stats.avgProgress)}%</div>
+                                            <div className="text-xs">Avg Prog</div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', textAlign: 'center' }}>
-                                    <div className="p-2 bg-gray-50 rounded">
-                                        <div className="text-lg font-bold">{stats.total}</div>
-                                        <div className="text-xs text-muted">Assigned</div>
-                                    </div>
-                                    <div className="p-2 bg-green-50 rounded text-green-700">
-                                        <div className="text-lg font-bold">{stats.completed}</div>
-                                        <div className="text-xs">Done</div>
-                                    </div>
-                                    <div className="p-2 bg-blue-50 rounded text-blue-700">
-                                        <div className="text-lg font-bold">{Math.round(stats.avgProgress)}%</div>
-                                        <div className="text-xs">Avg Prog</div>
-                                    </div>
-                                </div>
-                            </Card>
-                        );
-                    })}
-                </div>
-            )}
+                                </Card>
+                            );
+                        })}
+                    </div>
+                )
+            }
 
             {/* MODAL: New Task */}
-            {showTaskModal && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-                    <div style={{ background: 'var(--bg-surface)', padding: '2rem', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-bold">Create Task</h2>
-                            <button onClick={() => setShowTaskModal(false)}><X size={24} /></button>
-                        </div>
-                        <form onSubmit={handleAddTask} className="flex flex-col gap-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Title</label>
-                                <input
-                                    required
-                                    placeholder="Task Title"
-                                    className="w-full p-2 border rounded bg-transparent"
-                                    value={newTask.title}
-                                    onChange={e => setNewTask({ ...newTask, title: e.target.value })}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Description</label>
-                                <textarea
-                                    placeholder="Add details..."
-                                    className="w-full p-2 border rounded bg-transparent min-h-[100px]"
-                                    value={newTask.description}
-                                    onChange={e => setNewTask({ ...newTask, description: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Priority</label>
-                                    <select
-                                        className="w-full p-2 border rounded bg-transparent"
-                                        value={newTask.priority}
-                                        onChange={e => setNewTask({ ...newTask, priority: e.target.value })}
-                                    >
-                                        <option value="Low">Low</option>
-                                        <option value="Medium">Medium</option>
-                                        <option value="High">High</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Due Date</label>
-                                    <input
-                                        type="date"
-                                        className="w-full p-2 border rounded bg-transparent"
-                                        value={newTask.dueDate}
-                                        onChange={e => setNewTask({ ...newTask, dueDate: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Assign To</label>
-                                <select
-                                    multiple
-                                    className="w-full p-2 border rounded h-32 bg-transparent"
-                                    value={newTask.assignedTo}
-                                    onChange={e => {
-                                        const options = [...e.target.selectedOptions];
-                                        const values = options.map(option => option.value);
-                                        setNewTask({ ...newTask, assignedTo: values });
+            {
+                showTaskModal && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+                        <div style={{ background: 'var(--bg-surface)', padding: '2rem', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+                            <div className="flex justify-between items-start mb-6" style={{ position: 'relative' }}>
+                                <h2 className="text-xl font-bold">Create Task</h2>
+                                <button
+                                    onClick={() => setShowTaskModal(false)}
+                                    style={{
+                                        position: 'absolute',
+                                        right: '-1rem',
+                                        top: '-1rem',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '0.5rem'
                                     }}
                                 >
-                                    {teamMembers
-                                        .filter(m => {
-                                            if (role === ROLES.FOUNDER) return true; // Founders can assign to anyone
-                                            if (role === ROLES.CO_FOUNDER) return m.role === ROLES.TEAM || m.id === currentUser?.uid; // Co-Founders: Team only + Self
-                                            return false; // Others unlikely to see this, but safe default
-                                        })
-                                        .map(m => (
-                                            <option key={m.id} value={m.id}>{m.displayName || m.email} ({m.role})</option>
-                                        ))}
-                                </select>
-                                <p className="text-xs text-muted mt-1">Hold Ctrl/Cmd to select multiple</p>
+                                    <X size={24} color="#EF4444" /> {/* Red-500 */}
+                                </button>
                             </div>
+                            <form onSubmit={handleAddTask} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                <div>
+                                    <label className="block text-sm font-medium" style={{ marginBottom: '0.5rem', display: 'block' }}>Title</label>
+                                    <input
+                                        required
+                                        placeholder="Task Title"
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.75rem',
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            borderRadius: '4px',
+                                            color: 'white',
+                                            outline: 'none'
+                                        }}
+                                        value={newTask.title}
+                                        onChange={e => setNewTask({ ...newTask, title: e.target.value })}
+                                    />
+                                </div>
 
-                            <Button type="submit" disabled={isSubmitting}>
-                                {isSubmitting ? 'Creating...' : 'Create Task'}
-                            </Button>
-                        </form>
+                                <div>
+                                    <label className="block text-sm font-medium" style={{ marginBottom: '0.5rem', display: 'block' }}>Description</label>
+                                    <textarea
+                                        placeholder="Add details..."
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.75rem',
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            borderRadius: '4px',
+                                            color: 'white',
+                                            outline: 'none',
+                                            minHeight: '100px'
+                                        }}
+                                        value={newTask.description}
+                                        onChange={e => setNewTask({ ...newTask, description: e.target.value })}
+                                    />
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                    <div>
+                                        <label className="block text-sm font-medium" style={{ marginBottom: '0.5rem', display: 'block' }}>Priority</label>
+                                        <select
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.75rem',
+                                                background: 'var(--bg-card)', // Use card bg for dropdown legibility
+                                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                borderRadius: '4px',
+                                                color: 'white',
+                                                outline: 'none'
+                                            }}
+                                            value={newTask.priority}
+                                            onChange={e => setNewTask({ ...newTask, priority: e.target.value })}
+                                        >
+                                            <option value="Low">Low</option>
+                                            <option value="Medium">Medium</option>
+                                            <option value="High">High</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium" style={{ marginBottom: '0.5rem', display: 'block' }}>Due Date</label>
+                                        <input
+                                            type="date"
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.75rem',
+                                                background: 'rgba(255, 255, 255, 0.05)',
+                                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                borderRadius: '4px',
+                                                color: 'white',
+                                                outline: 'none',
+                                                colorScheme: 'dark' // Ensures calendar icon is light
+                                            }}
+                                            value={newTask.dueDate}
+                                            onChange={e => setNewTask({ ...newTask, dueDate: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium" style={{ marginBottom: '0.5rem', display: 'block' }}>Assign To</label>
+                                    <select
+                                        multiple
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.75rem',
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            borderRadius: '4px',
+                                            color: 'white',
+                                            outline: 'none',
+                                            height: '8rem'
+                                        }}
+                                        value={newTask.assignedTo}
+                                        onChange={e => {
+                                            const options = [...e.target.selectedOptions];
+                                            const values = options.map(option => option.value);
+                                            setNewTask({ ...newTask, assignedTo: values });
+                                        }}
+                                    >
+                                        {teamMembers
+                                            .filter(m => {
+                                                if (role === ROLES.FOUNDER) return true; // Founders can assign to anyone
+                                                if (role === ROLES.CO_FOUNDER) return m.role === ROLES.TEAM || m.id === currentUser?.uid; // Co-Founders: Team only + Self
+                                                return false; // Others unlikely to see this, but safe default
+                                            })
+                                            .map(m => (
+                                                <option key={m.id} value={m.id}>{m.displayName || m.email} ({m.role})</option>
+                                            ))}
+                                    </select>
+                                    <p className="text-xs text-muted mt-1">Hold Ctrl/Cmd to select multiple</p>
+                                </div>
+
+                                <Button type="submit" disabled={isSubmitting}>
+                                    {isSubmitting ? 'Creating...' : 'Create Task'}
+                                </Button>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* MODAL: New Milestone */}
-            {showMilestoneModal && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-                    <div style={{ background: 'var(--bg-surface)', padding: '2rem', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '400px' }}>
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-bold">New Milestone</h2>
-                            <button onClick={() => setShowMilestoneModal(false)}><X size={24} /></button>
+            {
+                showMilestoneModal && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+                        <div style={{ background: 'var(--bg-surface)', padding: '2rem', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '400px' }}>
+                            <div className="flex justify-between items-start mb-6" style={{ position: 'relative' }}>
+                                <h2 className="text-xl font-bold">New Milestone</h2>
+                                <button
+                                    onClick={() => setShowMilestoneModal(false)}
+                                    style={{
+                                        position: 'absolute',
+                                        right: '-1rem',
+                                        top: '-1rem',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '0.5rem'
+                                    }}
+                                >
+                                    <X size={24} color="#EF4444" />
+                                </button>
+                            </div>
+                            <form onSubmit={handleAddMilestone} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                <div>
+                                    <label className="block text-sm font-medium" style={{ marginBottom: '0.5rem', display: 'block' }}>Milestone Title</label>
+                                    <input
+                                        required
+                                        placeholder="e.g. MVP Launch"
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.75rem',
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            borderRadius: '4px',
+                                            color: 'white',
+                                            outline: 'none'
+                                        }}
+                                        value={newMilestone.title}
+                                        onChange={e => setNewMilestone({ ...newMilestone, title: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium" style={{ marginBottom: '0.5rem', display: 'block' }}>Target Date</label>
+                                    <input
+                                        required
+                                        type="date"
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.75rem',
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            borderRadius: '4px',
+                                            color: 'white',
+                                            outline: 'none',
+                                            colorScheme: 'dark'
+                                        }}
+                                        value={newMilestone.date}
+                                        onChange={e => setNewMilestone({ ...newMilestone, date: e.target.value })}
+                                    />
+                                </div>
+                                <Button type="submit">Create Milestone</Button>
+                            </form>
                         </div>
-                        <form onSubmit={handleAddMilestone} className="flex flex-col gap-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Milestone Title</label>
-                                <input
-                                    required
-                                    placeholder="e.g. MVP Launch"
-                                    className="w-full p-2 border rounded bg-transparent"
-                                    value={newMilestone.title}
-                                    onChange={e => setNewMilestone({ ...newMilestone, title: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Target Date</label>
-                                <input
-                                    required
-                                    type="date"
-                                    className="w-full p-2 border rounded bg-transparent"
-                                    value={newMilestone.date}
-                                    onChange={e => setNewMilestone({ ...newMilestone, date: e.target.value })}
-                                />
-                            </div>
-                            <Button type="submit">Create Milestone</Button>
-                        </form>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-        </div>
+        </div >
     );
 }
